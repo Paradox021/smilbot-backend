@@ -1,12 +1,12 @@
 import { Router } from 'express'
-import upload from '../libs/storage.js'
 import * as marketController from '../controllers/marketController.js'
+import { selfFromBody } from '../middleware/auth.js'
 
 const marketRouter = Router()
 
 marketRouter.get('/:marketId/offers', marketController.getAllMarketOffers)
-marketRouter.post('/:marketId/offers', marketController.addOffer)
-marketRouter.post('/:marketId/offers/:offerId/buy', marketController.buyOffer)
-marketRouter.delete('/:marketId/offers/:offerId', marketController.removeOffer)
+marketRouter.post('/:marketId/offers', selfFromBody, marketController.addOffer)
+marketRouter.post('/:marketId/offers/:offerId/buy', selfFromBody, marketController.buyOffer)
+marketRouter.delete('/:marketId/offers/:offerId', selfFromBody, marketController.removeOffer)
 
 export default marketRouter

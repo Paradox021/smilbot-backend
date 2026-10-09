@@ -32,7 +32,11 @@ const userSchema = new Schema(
 
         // --- CAMPOS DE PITY SYSTEM ---
         pityCount: {type:Number, default:0, min:0},
-        pityMythicsCount: {type:Number, default:0, min:0}
+        pityMythicsCount: {type:Number, default:0, min:0},
+
+        // --- CAMPOS DE AUTENTICACIÓN ---
+        // Se incrementa para revocar todos los refresh tokens del usuario
+        tokenVersion: {type:Number, default:0, select:false}
     },
     {
         timestamps:true,
