@@ -23,8 +23,13 @@ const transactionSchema = new Schema(
         balanceAfter: { type: Number, required: true },
         // Metadata flexible para auditoría contable y telemetría:
         // - CARD_BUY: { cardId, cardType, cardName, roll, isPity, pityCountBefore, pityCountAfter }
+        //   (roll es null cuando la carta sale por pity)
         // - DAILY_CLAIM: { streakAtClaim, previousStreak, previousMaxStreak, isNewRecord, streakBroken }
-        // - MARKET_BUY / MARKET_SELL: { offerId, cardId, cardName, cardType, serverId, counterpartyDiscordId }
+        // - MARKET_BUY: { cardId, sellerDiscordId, offerId }  (cardId y offerId como string)
+        // - MARKET_SELL: { cardId, buyerDiscordId, offerId }  (cardId y offerId como string)
+        // - ADMIN_ADJUST: {} desde addBalance/removeBalance; el snapshot de migración
+        //   (scripts/backfillStatsAndLedger.js) escribe { note, migratedAt, legacySnapshot }
+        // - TRADE: reservado, ningún código lo escribe actualmente
         metadata: {
             type: Schema.Types.Mixed,
             default: {}
