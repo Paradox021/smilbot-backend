@@ -54,6 +54,9 @@ const createUser = async (req, res) => {
 const deleteUser = async (req, res) => {
     try {
         const user = await userService.deleteUser(req.params.id)
+        if (!user) {
+            return res.status(404).json({ error: 'Usuario no encontrado' })
+        }
         res.status(200).json(user)
     } catch (error) {
         res.status(500).json({ error: error.message })
@@ -175,6 +178,10 @@ const rollRandomCard = async (req, res) => {
         if (error.code === 'INSUFFICIENT_BALANCE') {
             return res.status(400).json({ error: error.message })
         }
+        // La rareza obtenida no tiene cartas en el catálogo (no se cobra: la compra va después)
+        if (error.code === 'NO_CARDS_FOR_TYPE') {
+            return res.status(404).json({ error: error.message })
+        }
         res.status(500).json({ error: error.message })
     }
 }
@@ -187,6 +194,9 @@ const getUserStats = async (req, res) => {
         }
         res.status(200).json(stats)
     } catch (error) {
+        if (error.code === 'USER_NOT_FOUND') {
+            return res.status(404).json({ error: error.message })
+        }
         res.status(500).json({ error: error.message })
     }
 }

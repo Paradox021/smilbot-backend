@@ -41,7 +41,8 @@ const getUserCards = async (discordId) => {
     return copiaUsuario
 }
 
-const deleteUser = async (id) => await User.findByIdAndDelete(id)
+// Borra por discordId (como el resto de rutas /user/:id). null si no existe
+const deleteUser = async (discordId) => await User.findOneAndDelete({ discordId })
 
 const addCard = async (discordId, cardId) => {
     const user = await getUser(discordId)
@@ -452,7 +453,7 @@ const getUserEffectiveGachaBreakdown = async (user, cardTypeMap) => {
  */
 const getUserStats = async (discordId) => {
     const user = await getUser(discordId)
-    if (!user) throw new Error('Usuario no encontrado')
+    if (!user) throw Object.assign(new Error('Usuario no encontrado'), { code: 'USER_NOT_FOUND' })
 
     // Calcular ventas exitosas en el mercado
     const marketSalesCount = await MarketOffer.countDocuments({
