@@ -15,8 +15,8 @@ Backend API REST modular para el ecosistema **Smilbot**, encargado de la persist
    - Instancia de MongoDB (local o MongoDB Atlas)
 2. **Instalación:**
    ```bash
-   git clone https://github.com/Paradox021/backendSmilbot.git
-   cd backendSmilbot
+   git clone https://github.com/Paradox021/smilbot-backend.git
+   cd smilbot-backend
    npm install
    ```
 3. **Variables de entorno (`.env`):**
