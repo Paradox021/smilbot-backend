@@ -1,6 +1,6 @@
 // service for user
 
-import { User } from '../models/user.js'
+import { User, DAILY_COOLDOWN_HOURS, STREAK_WINDOW_HOURS } from '../models/user.js'
 import { Card } from '../models/card.js'
 import { Market, MarketOffer } from '../models/market.js'
 import { createTransaction } from './transactionService.js'
@@ -136,7 +136,7 @@ const dailyBalance = async (discordId, amount = 100) => {
     if (!user) throw new Error('Usuario no encontrado')
 
     const diffHours = user.getDiffHoursSinceLastDaily()
-    if (diffHours < 23) {
+    if (diffHours < DAILY_COOLDOWN_HOURS) {
         const { diffHours: h, diffMinutes: m } = user.getTimeToUseCommand()
         const error = new Error(`You can't use this command yet\nYou have to wait ${h} hours and ${m} minutes to use it again!`)
         error.code = 'COOLDOWN_ACTIVE'
@@ -146,7 +146,7 @@ const dailyBalance = async (discordId, amount = 100) => {
     }
 
     const previousStreak = user.dailyStreak || 0
-    const isStreakBroken = diffHours > 48 && previousStreak > 0
+    const isStreakBroken = diffHours > STREAK_WINDOW_HOURS && previousStreak > 0
 
     // Si se rompió la racha anterior, consolidamos el récord de la racha previa en previousMaxStreak
     if (isStreakBroken) {
@@ -156,7 +156,7 @@ const dailyBalance = async (discordId, amount = 100) => {
     const previousMaxStreak = user.previousMaxStreak || 0
 
     // Comprobar racha: entre 23h y 48h mantiene/suma racha; más de 48h o primera vez -> racha = 1
-    if (diffHours <= 48) {
+    if (diffHours <= STREAK_WINDOW_HOURS) {
         user.dailyStreak = previousStreak + 1
     } else {
         user.dailyStreak = 1
@@ -498,9 +498,12 @@ const getUserStats = async (discordId) => {
         discordId: user.discordId,
         username: user.username,
         balance: user.balance,
-        dailyStreak: user.dailyStreak || 0,
+        dailyStreak: user.getEffectiveStreak(),
         maxDailyStreak: user.maxDailyStreak || 0,
         previousMaxStreak: user.previousMaxStreak || 0,
+        lastDaily: new Date(user.getLastDailyDate()).toISOString(),
+        nextDailyAt: user.getNextDailyAt().toISOString(),
+        streakExpiresAt: user.getStreakExpiresAt()?.toISOString() ?? null,
         totalDailiesClaimed: user.totalDailiesClaimed || 0,
         totalCoinsEarned: user.totalCoinsEarned || 0,
         totalCoinsSpent: user.totalCoinsSpent || 0,
@@ -520,7 +523,12 @@ const getLeaderboardStreaks = async (type = 'current', limit = 10) => {
     const isMax = type === 'max'
 
     const sortField = isMax ? 'maxDailyStreak' : 'dailyStreak'
-    const users = await User.find({ [sortField]: { $gt: 0 } })
+    const filter = { [sortField]: { $gt: 0 } }
+    // Racha actual: solo usuarios cuya racha sigue viva (último daily dentro de la ventana)
+    if (!isMax) {
+        filter.lastDaily = { $gte: new Date(Date.now() - STREAK_WINDOW_HOURS * 60 * 60 * 1000) }
+    }
+    const users = await User.find(filter)
         .sort({ [sortField]: -1, username: 1 })
         .limit(parsedLimit)
         .select('discordId username dailyStreak maxDailyStreak')
