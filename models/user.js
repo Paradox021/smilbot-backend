@@ -23,6 +23,8 @@ const userSchema = new Schema(
         _id: {type:Schema.ObjectId, auto:true},
         discordId: {type:String, required:true, trim:true, unique:true},
         username: {type:String, required:true, trim:true},
+        // Hash del avatar de Discord (null = avatar por defecto). La URL se construye con libs/discordAvatar.js
+        avatar: {type:String, default:null, trim:true},
         balance: {type:Number, default:0},
         cards: [userCardSchema],
         lastDaily: {type:Date, default: () => new Date(Date.now() - 1000 * 60 * 60 * 24)},

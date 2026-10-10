@@ -2,7 +2,7 @@
 
 import { Router } from 'express'
 import * as userController from '../controllers/userController.js'
-import { requireAdmin, selfFromParams } from '../middleware/auth.js'
+import { requireAdmin, requireBot, selfFromParams } from '../middleware/auth.js'
 
 const userRouter = Router()
 
@@ -23,6 +23,7 @@ userRouter.post('/:id/card/random', selfFromParams, userController.rollRandomCar
 userRouter.post('/:id/card/:cardId', requireAdmin, userController.addCard)
 
 userRouter.get('/:id/stats', userController.getUserStats)
+userRouter.patch('/:id/profile', requireBot, userController.updateUserProfile)
 userRouter.get('/:id/transactions', selfFromParams, userController.getUserTransactions)
 
 userRouter.get('/:id', userController.getUser)

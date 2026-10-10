@@ -132,10 +132,18 @@ const getDiscordUserFromCode = async (code) => {
 }
 
 // Crea el usuario si es la primera vez que entra (mismo comportamiento que checkUser en el bot)
+// y sincroniza username y avatar con el perfil actual de Discord en cada login
 const findOrCreateDiscordUser = async (discordUser) => {
+    const username = discordUser.username
+    const avatar = discordUser.avatar || null
     const existing = await User.findOne({ discordId: discordUser.id }).select('+tokenVersion')
-    if (existing) return existing
-    const user = new User({ discordId: discordUser.id, username: discordUser.username })
+    if (existing) {
+        if (username) existing.username = username
+        existing.avatar = avatar
+        if (existing.isModified()) await existing.save()
+        return existing
+    }
+    const user = new User({ discordId: discordUser.id, username, avatar })
     return await user.save()
 }
 

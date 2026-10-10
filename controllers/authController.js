@@ -5,28 +5,40 @@ import * as userService from '../services/userService.js'
 import {
     REFRESH_COOKIE,
     STATE_COOKIE,
+    RETURN_TO_COOKIE,
     setSessionCookies,
     clearSessionCookies,
     setStateCookie,
     clearStateCookie,
+    sanitizeReturnTo,
     isTrustedOrigin
 } from '../libs/authCookies.js'
+import { buildAvatarUrl } from '../libs/discordAvatar.js'
 
-const redirectToFrontend = (res, status) => {
-    const url = new URL(process.env.FRONTEND_URL || 'http://localhost:5173')
+// returnTo (ruta relativa ya saneada) solo se usa en el login correcto
+const redirectToFrontend = (res, status, returnTo = null) => {
+    const frontend = new URL(process.env.FRONTEND_URL || 'http://localhost:5173')
+    let url = frontend
+    const safePath = sanitizeReturnTo(returnTo)
+    if (safePath) {
+        const candidate = new URL(safePath, frontend.origin)
+        if (candidate.origin === frontend.origin) url = candidate
+    }
     url.searchParams.set('login', status)
     res.redirect(url.toString())
 }
 
+// GET /auth/discord?returnTo=/ruta : returnTo opcional; si no es una ruta relativa segura se ignora
 const discordLogin = (req, res) => {
     const state = authService.generateOAuthState()
-    setStateCookie(res, state)
+    setStateCookie(res, state, sanitizeReturnTo(req.query.returnTo))
     res.redirect(authService.getDiscordAuthorizeUrl(state))
 }
 
 const discordCallback = async (req, res) => {
     const { code, state } = req.query
     const expectedState = req.cookies?.[STATE_COOKIE]
+    const returnTo = req.cookies?.[RETURN_TO_COOKIE]
     clearStateCookie(res)
 
     if (!code || !state || !expectedState || state !== expectedState) {
@@ -37,7 +49,7 @@ const discordCallback = async (req, res) => {
         const discordUser = await authService.getDiscordUserFromCode(code)
         const user = await authService.findOrCreateDiscordUser(discordUser)
         setSessionCookies(res, authService.generateTokens(user))
-        redirectToFrontend(res, 'success')
+        redirectToFrontend(res, 'success', returnTo)
     } catch (error) {
         console.error('Error en el callback de Discord:', error.message)
         redirectToFrontend(res, 'error')
@@ -85,7 +97,11 @@ const me = async (req, res) => {
         if (!user) {
             return res.status(404).json({ error: 'Usuario no encontrado' })
         }
-        res.status(200).json({ ...user.toObject(), isAdmin: req.auth.isAdmin })
+        res.status(200).json({
+            ...user.toObject(),
+            avatarUrl: buildAvatarUrl(user.discordId, user.avatar),
+            isAdmin: req.auth.isAdmin
+        })
     } catch (error) {
         res.status(500).json({ error: error.message })
     }

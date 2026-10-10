@@ -4,6 +4,7 @@ import { User, DAILY_COOLDOWN_HOURS, STREAK_WINDOW_HOURS } from '../models/user.
 import { Card } from '../models/card.js'
 import { Market, MarketOffer } from '../models/market.js'
 import { createTransaction } from './transactionService.js'
+import { buildAvatarUrl } from '../libs/discordAvatar.js'
 
 const getUsers = async () => await User.find()
 
@@ -498,6 +499,7 @@ const getUserStats = async (discordId) => {
     return {
         discordId: user.discordId,
         username: user.username,
+        avatarUrl: buildAvatarUrl(user.discordId, user.avatar),
         balance: user.balance,
         dailyStreak: user.getEffectiveStreak(),
         maxDailyStreak: user.maxDailyStreak || 0,
@@ -532,11 +534,12 @@ const getLeaderboardStreaks = async (type = 'current', limit = 10) => {
     const users = await User.find(filter)
         .sort({ [sortField]: -1, username: 1 })
         .limit(parsedLimit)
-        .select('discordId username dailyStreak maxDailyStreak')
+        .select('discordId username avatar dailyStreak maxDailyStreak')
 
     return users.map(u => ({
         discordId: u.discordId,
         username: u.username,
+        avatarUrl: buildAvatarUrl(u.discordId, u.avatar),
         streak: isMax ? u.maxDailyStreak : u.dailyStreak
     }))
 }
@@ -549,11 +552,12 @@ const getLeaderboardWealth = async (type = 'earned', limit = 10) => {
     const users = await User.find()
         .sort({ [sortField]: -1, username: 1 })
         .limit(parsedLimit)
-        .select('discordId username balance totalCoinsEarned')
+        .select('discordId username avatar balance totalCoinsEarned')
 
     return users.map(u => ({
         discordId: u.discordId,
         username: u.username,
+        avatarUrl: buildAvatarUrl(u.discordId, u.avatar),
         amount: isCurrent ? u.balance : u.totalCoinsEarned
     }))
 }
@@ -566,6 +570,7 @@ const getLeaderboardCards = async (limit = 10) => {
             $project: {
                 discordId: 1,
                 username: 1,
+                avatar: 1,
                 cardsCount: {
                     $reduce: {
                         input: '$cards',
@@ -582,12 +587,13 @@ const getLeaderboardCards = async (limit = 10) => {
                 _id: 0,
                 discordId: 1,
                 username: 1,
+                avatar: 1,
                 cardsCount: 1
             }
         }
     ])
 
-    return users
+    return users.map(({ avatar, ...u }) => ({ ...u, avatarUrl: buildAvatarUrl(u.discordId, avatar) }))
 }
 
 const getLeaderboardLuck = async (order = 'desc', minPulls = 20, limit = 10) => {
@@ -598,7 +604,7 @@ const getLeaderboardLuck = async (order = 'desc', minPulls = 20, limit = 10) => 
 
     const [cardTypeMap, users, soldOffers] = await Promise.all([
         getCardTypeMap(),
-        User.find({ 'cards.0': { $exists: true } }).select('_id discordId username cards pityMythicsCount').lean(),
+        User.find({ 'cards.0': { $exists: true } }).select('_id discordId username avatar cards pityMythicsCount').lean(),
         MarketOffer.find({ status: 'SOLD' }).select('cardId seller buyer sellerDiscordId buyerDiscordId').lean()
     ])
 
@@ -669,6 +675,7 @@ const getLeaderboardLuck = async (order = 'desc', minPulls = 20, limit = 10) => 
             candidates.push({
                 discordId: u.discordId,
                 username: u.username,
+                avatarUrl: buildAvatarUrl(u.discordId, u.avatar),
                 totalCards,
                 luckPercentage: luckScore.luckPercentage,
                 luckDelta: luckScore.luckDelta,
@@ -703,6 +710,23 @@ const getLeaderboardLuck = async (order = 'desc', minPulls = 20, limit = 10) => 
     }
 }
 
+// Actualiza el perfil de Discord (username / hash de avatar). No es un cambio de saldo: sin Transaction.
+// fields solo contiene las claves a modificar (ya validadas). Devuelve null si el usuario no existe.
+const updateUserProfile = async (discordId, fields) => {
+    const user = await User.findOneAndUpdate(
+        { discordId: discordId },
+        { $set: fields },
+        { new: true, runValidators: true }
+    ).select('discordId username avatar').lean()
+    if (!user) return null
+    return {
+        discordId: user.discordId,
+        username: user.username,
+        avatar: user.avatar ?? null,
+        avatarUrl: buildAvatarUrl(user.discordId, user.avatar)
+    }
+}
+
 const getUserWithNumberOfCards = async (discordId) => {
     const user = await User.aggregate([
         { $match: { discordId: discordId } },
@@ -730,6 +754,7 @@ export {
     addBalanceWithId,
     rollRandomCardPurchase,
     getUserStats,
+    updateUserProfile,
     getLeaderboardStreaks,
     getLeaderboardWealth,
     getLeaderboardCards,

@@ -201,6 +201,53 @@ const getUserStats = async (req, res) => {
     }
 }
 
+const PROFILE_USERNAME_MAX_LENGTH = 32
+const DISCORD_AVATAR_HASH = /^(a_)?[0-9a-f]{32}$/
+
+// Valida el body de PATCH /user/:id/profile. Devuelve { fields } o { error }
+const parseProfileBody = (body) => {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        return { error: 'Body inválido' }
+    }
+    const fields = {}
+    if (body.username !== undefined) {
+        if (typeof body.username !== 'string') return { error: 'username debe ser un string' }
+        const username = body.username.trim()
+        if (!username) return { error: 'username no puede estar vacío' }
+        if (username.length > PROFILE_USERNAME_MAX_LENGTH) {
+            return { error: `username no puede superar ${PROFILE_USERNAME_MAX_LENGTH} caracteres` }
+        }
+        fields.username = username
+    }
+    if (body.avatar !== undefined) {
+        if (body.avatar !== null && (typeof body.avatar !== 'string' || !DISCORD_AVATAR_HASH.test(body.avatar))) {
+            return { error: 'avatar debe ser un hash de avatar de Discord o null' }
+        }
+        fields.avatar = body.avatar
+    }
+    if (Object.keys(fields).length === 0) {
+        return { error: 'Debe indicarse username y/o avatar' }
+    }
+    return { fields }
+}
+
+// PATCH /user/:id/profile (solo bot): sincroniza username y avatar de Discord
+const updateUserProfile = async (req, res) => {
+    try {
+        const { fields, error } = parseProfileBody(req.body)
+        if (error) {
+            return res.status(400).json({ error })
+        }
+        const profile = await userService.updateUserProfile(req.params.id, fields)
+        if (!profile) {
+            return res.status(404).json({ error: 'Usuario no encontrado' })
+        }
+        res.status(200).json(profile)
+    } catch (error) {
+        res.status(500).json({ error: error.message })
+    }
+}
+
 const getUserTransactions = async (req, res) => {
     try {
         const user = await userService.getUser(req.params.id)
@@ -232,5 +279,6 @@ export {
     getUserWithNumberOfCards,
     rollRandomCard,
     getUserStats,
+    updateUserProfile,
     getUserTransactions
 }
