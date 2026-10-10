@@ -706,16 +706,6 @@ const getUserWithNumberOfCards = async (discordId) => {
     return user
 }
 
-const getUserCardByName = async (discordId, cardName) => {
-    const user = await User.findOne({ discordId: discordId }).populate('cards.cardId')
-    if (!user) throw new Error('Usuario no encontrado')
-
-    const cardItem = (user.cards || []).find(item => item.cardId && item.cardId.name === cardName && item.count > 0)
-    if (!cardItem) throw new Error('Card not found in your collection')
-
-    return { card: cardItem.cardId, userId: user._id }
-}
-
 export {
     getUsers,
     getUser,
@@ -728,7 +718,6 @@ export {
     dailyBalance,
     getUserCards,
     getUserWithNumberOfCards,
-    getUserCardByName,
     addBalanceWithId,
     rollRandomCardPurchase,
     getUserStats,

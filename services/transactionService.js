@@ -2,9 +2,10 @@
 import { Transaction } from '../models/transaction.js'
 
 /**
- * Creates and saves an immutable transaction record
+ * Creates and saves an immutable transaction record.
+ * Pass { session } to write it inside a MongoDB transaction.
  */
-const createTransaction = async ({ discordId, type, amount, balanceBefore, balanceAfter, metadata = {} }) => {
+const createTransaction = async ({ discordId, type, amount, balanceBefore, balanceAfter, metadata = {} }, { session } = {}) => {
     const transaction = new Transaction({
         discordId,
         type,
@@ -13,7 +14,7 @@ const createTransaction = async ({ discordId, type, amount, balanceBefore, balan
         balanceAfter,
         metadata
     })
-    return await transaction.save()
+    return await transaction.save({ session })
 }
 
 /**

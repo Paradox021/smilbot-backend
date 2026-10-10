@@ -1,157 +1,116 @@
-// controller for market page 
+// controller for market page
+import mongoose from 'mongoose'
 import * as marketService from '../services/marketService.js'
-import * as userService from '../services/userService.js'
-import { User } from '../models/user.js'
-import { createTransaction } from '../services/transactionService.js'
+
+const ERROR_STATUS = {
+    INVALID_BODY: 400,
+    OFFER_NOT_ACTIVE: 400,
+    INSUFFICIENT_BALANCE: 400,
+    OWN_OFFER: 400,
+    NOT_OFFER_OWNER: 403,
+    OFFER_NOT_FOUND: 404,
+    SELLER_NOT_FOUND: 404,
+    CARD_NOT_OWNED: 404
+}
+
+const handleError = (res, error) => {
+    const status = ERROR_STATUS[error.code]
+    if (status) return res.status(status).json({ error: error.message })
+    console.error('Error en el mercado:', error)
+    res.status(500).json({ error: error.message })
+}
+
+const isNonEmptyString = (value) => typeof value === 'string' && value.trim() !== ''
+
+// Devuelve el mensaje de error de validación, o null si el body es válido
+const validateActor = (body) => {
+    if (!isNonEmptyString(body?.discordId)) return 'discordId is required'
+    if (body.username !== undefined && !isNonEmptyString(body.username)) return 'username must be a non-empty string'
+    return null
+}
+
+const validateNewOffer = (body) => {
+    const actorError = validateActor(body)
+    if (actorError) return actorError
+    if (body.cardId !== undefined) {
+        if (!mongoose.isValidObjectId(body.cardId)) return 'cardId is not valid'
+    } else if (!isNonEmptyString(body.cardName)) {
+        return 'cardId or cardName is required'
+    }
+    const price = Number(body.price)
+    if (!Number.isInteger(price) || price <= 0) return 'price must be a positive integer'
+    return null
+}
 
 const getAllMarketOffers = async (req, res) => {
     try {
-        const market = await marketService.getMarket(req.params.marketId)
-        if (!market) {
-            await marketService.createMarket({ discordId: req.params.marketId })
-        }
-        const offers = await marketService.getAllMarketOffers(req.params.marketId)
+        const offers = await marketService.getActiveOffers(req.params.serverId)
         res.status(200).json(offers)
     } catch (error) {
-        res.status(500).json({ error: error.message })
+        handleError(res, error)
+    }
+}
+
+const getMarketOffer = async (req, res) => {
+    try {
+        const offer = await marketService.getOffer(req.params.serverId, req.params.offerId)
+        if (!offer) return res.status(404).json({ error: 'Offer not found' })
+        res.status(200).json(offer)
+    } catch (error) {
+        handleError(res, error)
     }
 }
 
 const addOffer = async (req, res) => {
+    const validationError = validateNewOffer(req.body)
+    if (validationError) return res.status(400).json({ error: validationError })
+
     try {
-        const cardName = req.body.cardName
-        const discordId = req.body.discordId
-        let user = await userService.getUser(discordId)
-        if (!user) {
-            user = await userService.createUser({ discordId: discordId, username: req.body.username })
-        }
-        const market = await marketService.getMarket(req.params.marketId)
-        if (!market) {
-            await marketService.createMarket({ discordId: req.params.marketId })
-        }
-        const { card, userId } = await userService.getUserCardByName(discordId, cardName)
-        if (!card) {
-            return res.status(404).json({ error: "Card not found" })
-        }
-        const offer = {
-            cardId: card._id,
-            price: Number(req.body.price),
-            seller: userId,
-            sellerDiscordId: discordId,
-            active: true,
-            status: 'ACTIVE'
-        }
-        
-        await marketService.addOffer(req.params.marketId, offer)
-        await userService.removeCard(discordId, offer.cardId)
-        res.status(200).json(offer)
+        const offer = await marketService.publishOffer({
+            serverId: req.params.serverId,
+            discordId: req.body.discordId,
+            username: req.body.username,
+            cardId: req.body.cardId,
+            cardName: req.body.cardName,
+            price: Number(req.body.price)
+        })
+        res.status(201).json(offer)
     } catch (error) {
-        console.log(error)
-        res.status(500).json({ error: error.message })
+        handleError(res, error)
     }
 }
 
 const buyOffer = async (req, res) => {
+    const validationError = validateActor(req.body)
+    if (validationError) return res.status(400).json({ error: validationError })
+
     try {
-        let buyer = await userService.getUser(req.body.discordId)
-        if (!buyer) {
-            buyer = await userService.createUser({ discordId: req.body.discordId, username: req.body.username })
-        }
-
-        const offer = await marketService.getMarketOffer(req.params.marketId, req.params.offerId)
-        if (!offer) {
-            return res.status(404).json({ error: "Offer not found" })
-        }
-
-        const isInactive = offer.status ? offer.status !== 'ACTIVE' : offer.active === false
-        if (isInactive) {
-            return res.status(400).json({ error: "Offer is not active" })
-        }
-
-        if (offer.price > buyer.balance) {
-            return res.status(400).json({ error: "You don't have enough money" })
-        }
-
-        const seller = await User.findById(offer.seller)
-        if (!seller) {
-            return res.status(404).json({ error: "Seller not found" })
-        }
-
-        if (seller._id.toString() === buyer._id.toString()) {
-            return res.status(400).json({ error: "You can't buy your own offer" })
-        }
-
-        // Ejecutar compra en el mercado
-        const boughtOffer = await marketService.buyOffer(req.params.marketId, req.params.offerId, buyer)
-
-        // Transferir carta al comprador
-        await userService.addCard(buyer.discordId, boughtOffer.cardId)
-
-        // Actualizar balance y métricas del comprador
-        const buyerBalanceBefore = buyer.balance
-        buyer.balance -= boughtOffer.price
-        const buyerBalanceAfter = buyer.balance
-        buyer.totalCoinsSpent = (buyer.totalCoinsSpent || 0) + boughtOffer.price
-        await buyer.save()
-
-        // Registrar transacción de compra (buyer)
-        await createTransaction({
-            discordId: buyer.discordId,
-            type: 'MARKET_BUY',
-            amount: -boughtOffer.price,
-            balanceBefore: buyerBalanceBefore,
-            balanceAfter: buyerBalanceAfter,
-            metadata: {
-                cardId: boughtOffer.cardId ? boughtOffer.cardId.toString() : null,
-                sellerDiscordId: seller.discordId,
-                offerId: boughtOffer._id ? boughtOffer._id.toString() : null
-            }
+        const offer = await marketService.buyOffer({
+            serverId: req.params.serverId,
+            offerId: req.params.offerId,
+            discordId: req.body.discordId,
+            username: req.body.username
         })
-
-        // Actualizar balance y métricas del vendedor
-        const sellerBalanceBefore = seller.balance
-        seller.balance += boughtOffer.price
-        const sellerBalanceAfter = seller.balance
-        seller.totalCoinsEarned = (seller.totalCoinsEarned || 0) + boughtOffer.price
-        await seller.save()
-
-        // Registrar transacción de venta (seller)
-        await createTransaction({
-            discordId: seller.discordId,
-            type: 'MARKET_SELL',
-            amount: boughtOffer.price,
-            balanceBefore: sellerBalanceBefore,
-            balanceAfter: sellerBalanceAfter,
-            metadata: {
-                cardId: boughtOffer.cardId ? boughtOffer.cardId.toString() : null,
-                buyerDiscordId: buyer.discordId,
-                offerId: boughtOffer._id ? boughtOffer._id.toString() : null
-            }
-        })
-
-        res.status(200).json(boughtOffer)
+        res.status(200).json(offer)
     } catch (error) {
-        console.log("error --- ", error)
-        res.status(500).json({ error: error.message })
+        handleError(res, error)
     }
 }
 
 const removeOffer = async (req, res) => {
+    const validationError = validateActor(req.body)
+    if (validationError) return res.status(400).json({ error: validationError })
+
     try {
-        let user = await userService.getUser(req.body.discordId)
-        if (!user) {
-            user = await userService.createUser({ discordId: req.body.discordId, username: req.body.username })
-        }
-        const market = await marketService.getMarket(req.params.marketId)
-        if (!market) {
-            await marketService.createMarket({ discordId: req.params.marketId })
-        }
-        const removedOffer = await marketService.removeOffer(req.params.marketId, req.params.offerId, user._id)
-        await userService.addCard(req.body.discordId, removedOffer.cardId)
-        res.status(200).json(removedOffer)
+        const offer = await marketService.cancelOffer({
+            serverId: req.params.serverId,
+            offerId: req.params.offerId,
+            discordId: req.body.discordId
+        })
+        res.status(200).json(offer)
     } catch (error) {
-        res.status(500).json({ error: error.message })
+        handleError(res, error)
     }
 }
 
-export { getAllMarketOffers, addOffer, buyOffer, removeOffer }
+export { getAllMarketOffers, getMarketOffer, addOffer, buyOffer, removeOffer }
