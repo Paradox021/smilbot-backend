@@ -41,5 +41,6 @@ Antes de entregar una respuesta final o cerrar un cambio:
 - **Stack**: Node.js (ES Modules, `import/export`), Express.js, MongoDB con Mongoose.
 - **Integridad Contable**: Cada variación de saldo o compra/venta debe registrarse inmutablemente en `Transaction` con su respectivo `type` y `metadata`.
 - **Transacciones Atómicas**: Las operaciones complejas como compra en el mercado P2P deben ejecutarse dentro de una sesión transaccional de MongoDB para garantizar atomicidad.
+- **Autorización de Rutas**: Toda ruta nueva debe declarar explícitamente su permiso (`requireAdmin`, `selfFromParams`/`selfFromBody` o lectura para cualquier autenticado) usando `middleware/auth.js`, y añadirse a la matriz de permisos de `Backend API/Autenticacion.md` en la bóveda. Una ruta que modifica datos nunca debe quedar abierta a cualquier usuario autenticado.
 - **Variables de Entorno**: Cualquier nueva variable requerida debe registrarse en `.env.example` con un valor de ejemplo o explicación.
 - **Consistencia**: Respeta las convenciones existentes de nombrado (camelCase para controladores/servicios, PascalCase para modelos).
