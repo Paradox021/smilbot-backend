@@ -6,7 +6,8 @@ export const TRANSACTION_TYPES = [
     'MARKET_BUY',
     'MARKET_SELL',
     'TRADE',
-    'ADMIN_ADJUST'
+    'ADMIN_ADJUST',
+    'CARD_REMOVED'
 ]
 
 const transactionSchema = new Schema(
@@ -29,6 +30,8 @@ const transactionSchema = new Schema(
         // - MARKET_SELL: { cardId, buyerDiscordId, offerId }  (cardId y offerId como string)
         // - ADMIN_ADJUST: {} desde addBalance/removeBalance; el snapshot de migración
         //   (scripts/backfillStatsAndLedger.js) escribe { note, migratedAt, legacySnapshot }
+        // - CARD_REMOVED (admin borra una carta del catálogo, amount 0):
+        //   { cardId, cardName, cardType, copiesRemoved, offersCancelled }
         // - TRADE: reservado, ningún código lo escribe actualmente
         metadata: {
             type: Schema.Types.Mixed,
