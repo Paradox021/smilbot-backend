@@ -48,6 +48,12 @@ const requireUser = (req, res, next) => {
     res.status(403).json({ error: 'Requiere una sesión de usuario' })
 }
 
+// Solo el bot (API key). Un JWT de usuario se rechaza aunque sea admin o actúe sobre sí mismo
+const requireBot = (req, res, next) => {
+    if (req.auth?.type === 'bot') return next()
+    res.status(403).json({ error: 'Requiere la API key del bot' })
+}
+
 // Solo el bot o usuarios listados en ADMIN_DISCORD_IDS
 const requireAdmin = (req, res, next) => {
     if (req.auth?.isAdmin) return next()
@@ -65,4 +71,4 @@ const requireSelf = (getDiscordId) => (req, res, next) => {
 const selfFromParams = requireSelf(req => req.params.id)
 const selfFromBody = requireSelf(req => req.body?.discordId)
 
-export { authenticate, requireUser, requireAdmin, requireSelf, selfFromParams, selfFromBody }
+export { authenticate, requireUser, requireBot, requireAdmin, requireSelf, selfFromParams, selfFromBody }
