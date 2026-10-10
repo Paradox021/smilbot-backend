@@ -1,16 +1,24 @@
 // service for card
 
+import mongoose from 'mongoose'
 import { Card } from '../models/card.js'
 import crypto from 'crypto'
+
+// Errores de dominio con code, mapeados a status HTTP en cardController (mismo patrón que marketService)
+const cardError = (code, message) => {
+    const error = new Error(message)
+    error.code = code
+    return error
+}
 
 const getCards = async () => await Card.find().sort({type:1})
 
 const getRandomTypeCard = async (type) => {
     const cards = await Card.find({ type: type })
-    
-    if (cards.length === 0) 
-        throw new Error('No cards found for this type');
-    
+
+    if (cards.length === 0)
+        throw cardError('NO_CARDS_FOR_TYPE', 'No cards found for this type')
+
     const randomIndex = crypto.randomInt(0, cards.length)
     return cards[randomIndex]
 }
@@ -25,7 +33,11 @@ const getRareCard = async () => await getRandomTypeCard(1)
 
 const getCommonCard = async () => await getRandomTypeCard(0)
 
-const getCard = async (id) => await Card.findById(id)
+// null si no existe (o si el id no es un ObjectId válido)
+const getCard = async (id) => {
+    if (!mongoose.isValidObjectId(id)) return null
+    return await Card.findById(id)
+}
 
 // Probabilidades acumuladas sobre 1000 (cada umbral incluye los anteriores)
 const CARD_TIERS = [
