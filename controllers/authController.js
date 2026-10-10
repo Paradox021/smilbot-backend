@@ -13,7 +13,6 @@ import {
     sanitizeReturnTo,
     isTrustedOrigin
 } from '../libs/authCookies.js'
-import { buildAvatarUrl } from '../libs/discordAvatar.js'
 
 // returnTo (ruta relativa ya saneada) solo se usa en el login correcto
 const redirectToFrontend = (res, status, returnTo = null) => {
@@ -98,8 +97,7 @@ const me = async (req, res) => {
             return res.status(404).json({ error: 'Usuario no encontrado' })
         }
         res.status(200).json({
-            ...user.toObject(),
-            avatarUrl: buildAvatarUrl(user.discordId, user.avatar),
+            ...userService.toUserResponse(user),
             isAdmin: req.auth.isAdmin
         })
     } catch (error) {

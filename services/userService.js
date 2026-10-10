@@ -10,6 +10,13 @@ const getUsers = async () => await User.find()
 
 const getUser = async (discordId) => await User.findOne({ discordId: discordId })
 
+// Forma pública de un usuario: racha efectiva (la guardada solo se recalcula al reclamar) y avatarUrl
+const toUserResponse = (user) => ({
+    ...user.toObject(),
+    dailyStreak: user.getEffectiveStreak(),
+    avatarUrl: buildAvatarUrl(user.discordId, user.avatar)
+})
+
 const createUser = async (user) => { 
     const existingUser = await User.findOne({ discordId: user.discordId })
     if (existingUser) {
@@ -500,6 +507,7 @@ const getUserStats = async (discordId) => {
         discordId: user.discordId,
         username: user.username,
         avatarUrl: buildAvatarUrl(user.discordId, user.avatar),
+        createdAt: user.createdAt ? new Date(user.createdAt).toISOString() : null,
         balance: user.balance,
         dailyStreak: user.getEffectiveStreak(),
         maxDailyStreak: user.maxDailyStreak || 0,
@@ -742,6 +750,7 @@ const getUserWithNumberOfCards = async (discordId) => {
 export {
     getUsers,
     getUser,
+    toUserResponse,
     createUser,
     deleteUser,
     addCard,
