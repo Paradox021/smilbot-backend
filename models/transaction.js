@@ -6,7 +6,8 @@ export const TRANSACTION_TYPES = [
     'MARKET_BUY',
     'MARKET_SELL',
     'TRADE',
-    'ADMIN_ADJUST'
+    'ADMIN_ADJUST',
+    'CARD_REMOVED'
 ]
 
 const transactionSchema = new Schema(
@@ -25,6 +26,8 @@ const transactionSchema = new Schema(
         // - CARD_BUY: { cardId, cardType, cardName, roll, isPity, pityCountBefore, pityCountAfter }
         // - DAILY_CLAIM: { streakAtClaim, previousStreak, previousMaxStreak, isNewRecord, streakBroken }
         // - MARKET_BUY / MARKET_SELL: { offerId, cardId, cardName, cardType, serverId, counterpartyDiscordId }
+        // - CARD_REMOVED (admin borra una carta del catálogo, amount 0):
+        //   { cardId, cardName, cardType, copiesRemoved, offersCancelled }
         metadata: {
             type: Schema.Types.Mixed,
             default: {}
