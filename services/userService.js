@@ -44,7 +44,7 @@ const getUserCards = async (discordId) => {
         })
         .sort((a, b) => (a.type || 0) - (b.type || 0))
 
-    const copiaUsuario = user.toObject()
+    const copiaUsuario = toUserResponse(user)
     copiaUsuario.cards = activeCards
     return copiaUsuario
 }
