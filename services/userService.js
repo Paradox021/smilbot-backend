@@ -1,6 +1,15 @@
 // service for user
 
-import { User, DAILY_COOLDOWN_HOURS, STREAK_WINDOW_HOURS } from '../models/user.js'
+import {
+    User,
+    DAILY_COOLDOWN_HOURS,
+    STREAK_WINDOW_HOURS,
+    STREAK_RESTORE_WINDOW_HOURS,
+    STREAK_RESTORE_MIN_STREAK,
+    STREAK_RESTORE_COOLDOWN_DAYS,
+    HOUR_MS,
+    getStreakRestoreCost
+} from '../models/user.js'
 import { Card } from '../models/card.js'
 import { Market, MarketOffer } from '../models/market.js'
 import { createTransaction } from './transactionService.js'
@@ -158,8 +167,11 @@ const dailyBalance = async (discordId, amount = 100) => {
     const isStreakBroken = diffHours > STREAK_WINDOW_HOURS && previousStreak > 0
 
     // Si se rompió la racha anterior, consolidamos el récord de la racha previa en previousMaxStreak
+    // y la guardamos como racha perdida para poder recuperarla (ver restoreStreak)
     if (isStreakBroken) {
         user.previousMaxStreak = user.maxDailyStreak || previousStreak
+        user.lostStreak = previousStreak
+        user.streakLostAt = new Date(new Date(user.getLastDailyDate()).getTime() + STREAK_WINDOW_HOURS * HOUR_MS)
     }
 
     const previousMaxStreak = user.previousMaxStreak || 0
@@ -211,7 +223,145 @@ const dailyBalance = async (discordId, amount = 100) => {
         maxDailyStreak: user.maxDailyStreak,
         previousMaxStreak,
         isNewRecord,
-        totalDailiesClaimed: user.totalDailiesClaimed
+        totalDailiesClaimed: user.totalDailiesClaimed,
+        // Solo si este reclamo rompió la racha: si y cuánto cuesta recuperarla
+        streakRestore: isStreakBroken ? getStreakRestoreQuote(user) : null
+    }
+}
+
+/**
+ * Recuperación de racha
+ *
+ * Una racha rota se puede recuperar durante STREAK_RESTORE_WINDOW_HOURS desde que se rompió,
+ * pagando getStreakRestoreCost(lostStreak). Hay que reclamar antes el daily que la rompe (que la
+ * guarda en lostStreak): la racha recuperada es lostStreak + la racha nueva, que sigue contando.
+ */
+const STREAK_RESTORE_MESSAGES = {
+    NO_LOST_STREAK: 'No tienes ninguna racha perdida que recuperar',
+    RESTORE_EXPIRED: 'El plazo para recuperar tu racha ya terminó',
+    CLAIM_DAILY_FIRST: 'Reclama primero el daily y después recupera la racha',
+    RESTORE_COOLDOWN: 'Ya recuperaste una racha recientemente',
+    INSUFFICIENT_BALANCE: 'No tienes suficientes monedas para recuperar la racha'
+}
+
+// Devuelve si el usuario puede recuperar una racha y en qué condiciones (no modifica nada)
+const getStreakRestoreQuote = (user) => {
+    const now = Date.now()
+    const currentStreak = user.getEffectiveStreak()
+    const balance = user.balance
+
+    let lostStreak = 0
+    let lostAt = null
+    let reason = null
+
+    if (currentStreak === 0 && (user.dailyStreak || 0) >= STREAK_RESTORE_MIN_STREAK) {
+        // Racha rota pero aún sin reclamar el daily que la consolida en lostStreak
+        lostStreak = user.dailyStreak
+        lostAt = new Date(new Date(user.getLastDailyDate()).getTime() + STREAK_WINDOW_HOURS * HOUR_MS)
+        reason = 'CLAIM_DAILY_FIRST'
+    } else if (currentStreak > 0 && (user.lostStreak || 0) >= STREAK_RESTORE_MIN_STREAK && user.streakLostAt) {
+        lostStreak = user.lostStreak
+        lostAt = user.streakLostAt
+    }
+
+    if (lostStreak === 0) {
+        return { available: false, reason: 'NO_LOST_STREAK', currentStreak, balance }
+    }
+
+    const expiresAt = new Date(lostAt.getTime() + STREAK_RESTORE_WINDOW_HOURS * HOUR_MS)
+    const nextRestoreAt = user.lastStreakRestoreAt
+        ? new Date(user.lastStreakRestoreAt.getTime() + STREAK_RESTORE_COOLDOWN_DAYS * 24 * HOUR_MS)
+        : null
+    const cost = getStreakRestoreCost(lostStreak)
+
+    if (now > expiresAt.getTime()) {
+        reason = 'RESTORE_EXPIRED'
+    } else if (nextRestoreAt && now < nextRestoreAt.getTime()) {
+        reason = 'RESTORE_COOLDOWN'
+    } else if (!reason && balance < cost) {
+        reason = 'INSUFFICIENT_BALANCE'
+    }
+
+    return {
+        available: reason === null,
+        reason,
+        lostStreak,
+        currentStreak,
+        // Con CLAIM_DAILY_FIRST la racha nueva será 1 al reclamar el daily
+        restoredStreak: lostStreak + Math.max(currentStreak, 1),
+        cost,
+        balance,
+        streakLostAt: lostAt.toISOString(),
+        expiresAt: expiresAt.toISOString(),
+        nextRestoreAt: nextRestoreAt ? nextRestoreAt.toISOString() : null
+    }
+}
+
+const streakRestoreError = (code, quote) =>
+    Object.assign(new Error(STREAK_RESTORE_MESSAGES[code] || 'No se pudo recuperar la racha'), { code, quote })
+
+const getStreakRestore = async (discordId) => {
+    const user = await getUser(discordId)
+    if (!user) return null
+    return getStreakRestoreQuote(user)
+}
+
+const restoreStreak = async (discordId) => {
+    const user = await getUser(discordId)
+    if (!user) throw Object.assign(new Error('Usuario no encontrado'), { code: 'USER_NOT_FOUND' })
+
+    const quote = getStreakRestoreQuote(user)
+    if (!quote.available) throw streakRestoreError(quote.reason, quote)
+
+    const streakBefore = quote.currentStreak
+    const streakAfter = quote.restoredStreak
+    const now = new Date()
+
+    // Actualización condicional: si otra petición (doble clic, daily) cambió el estado, no se cobra dos veces
+    const updated = await User.findOneAndUpdate(
+        {
+            _id: user._id,
+            lostStreak: user.lostStreak,
+            streakLostAt: user.streakLostAt,
+            dailyStreak: user.dailyStreak,
+            balance: { $gte: quote.cost }
+        },
+        {
+            $set: { dailyStreak: streakAfter, lostStreak: 0, streakLostAt: null, lastStreakRestoreAt: now },
+            $max: { maxDailyStreak: streakAfter },
+            $inc: { balance: -quote.cost, totalCoinsSpent: quote.cost }
+        },
+        { new: true }
+    )
+
+    if (!updated) {
+        const fresh = await getStreakRestore(discordId)
+        if (fresh && !fresh.available) throw streakRestoreError(fresh.reason, fresh)
+        throw Object.assign(new Error('Tu racha cambió mientras se recuperaba, inténtalo de nuevo'), { code: 'STREAK_RESTORE_CONFLICT' })
+    }
+
+    await createTransaction({
+        discordId: updated.discordId,
+        type: 'STREAK_RESTORE',
+        amount: -quote.cost,
+        balanceBefore: updated.balance + quote.cost,
+        balanceAfter: updated.balance,
+        metadata: {
+            lostStreak: quote.lostStreak,
+            streakBefore,
+            streakAfter,
+            streakLostAt: quote.streakLostAt
+        }
+    })
+
+    return {
+        ok: true,
+        lostStreak: quote.lostStreak,
+        dailyStreak: updated.dailyStreak,
+        maxDailyStreak: updated.maxDailyStreak,
+        cost: quote.cost,
+        balance: updated.balance,
+        streakExpiresAt: updated.getStreakExpiresAt()?.toISOString() ?? null
     }
 }
 
@@ -758,6 +908,8 @@ export {
     addBalance,
     removeBalance,
     dailyBalance,
+    getStreakRestore,
+    restoreStreak,
     getUserCards,
     getUserWithNumberOfCards,
     addBalanceWithId,

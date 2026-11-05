@@ -7,7 +7,8 @@ export const TRANSACTION_TYPES = [
     'MARKET_SELL',
     'TRADE',
     'ADMIN_ADJUST',
-    'CARD_REMOVED'
+    'CARD_REMOVED',
+    'STREAK_RESTORE'
 ]
 
 const transactionSchema = new Schema(
@@ -32,6 +33,7 @@ const transactionSchema = new Schema(
         //   (scripts/backfillStatsAndLedger.js) escribe { note, migratedAt, legacySnapshot }
         // - CARD_REMOVED (admin borra una carta del catálogo, amount 0):
         //   { cardId, cardName, cardType, copiesRemoved, offersCancelled }
+        // - STREAK_RESTORE: { lostStreak, streakBefore, streakAfter, streakLostAt }
         // - TRADE: reservado, ningún código lo escribe actualmente
         metadata: {
             type: Schema.Types.Mixed,

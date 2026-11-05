@@ -12,6 +12,8 @@ userRouter.post('/id', requireAdmin, userController.getUserWithBody)
 userRouter.post('/', requireAdmin, userController.createUser)
 userRouter.delete('/:id', requireAdmin, userController.deleteUser)
 userRouter.post('/:id/dailyBalance', selfFromParams, userController.dailyBalance)
+userRouter.get('/:id/streak/restore', selfFromParams, userController.getStreakRestore)
+userRouter.post('/:id/streak/restore', selfFromParams, userController.restoreStreak)
 
 userRouter.delete('/:id/card/:cardId', requireAdmin, userController.removeCard)
 userRouter.post('/:id/balance/:amount', requireAdmin, userController.addBalance)

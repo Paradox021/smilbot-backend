@@ -115,6 +115,40 @@ const dailyBalance = async (req, res) => {
     }
 }
 
+// GET /user/:id/streak/restore: si se puede recuperar la racha, cuánto cuesta y hasta cuándo
+const getStreakRestore = async (req, res) => {
+    try {
+        const quote = await userService.getStreakRestore(req.params.id)
+        if (!quote) {
+            return res.status(404).json({ error: 'Usuario no encontrado' })
+        }
+        res.status(200).json(quote)
+    } catch (error) {
+        res.status(500).json({ error: error.message })
+    }
+}
+
+const STREAK_RESTORE_ERROR_CODES = ['NO_LOST_STREAK', 'RESTORE_EXPIRED', 'CLAIM_DAILY_FIRST', 'RESTORE_COOLDOWN', 'INSUFFICIENT_BALANCE']
+
+// POST /user/:id/streak/restore: cobra y recupera la racha perdida
+const restoreStreak = async (req, res) => {
+    try {
+        const result = await userService.restoreStreak(req.params.id)
+        res.status(200).json(result)
+    } catch (error) {
+        if (error.code === 'USER_NOT_FOUND') {
+            return res.status(404).json({ error: error.message })
+        }
+        if (STREAK_RESTORE_ERROR_CODES.includes(error.code)) {
+            return res.status(400).json({ error: error.message, code: error.code, ...error.quote })
+        }
+        if (error.code === 'STREAK_RESTORE_CONFLICT') {
+            return res.status(409).json({ error: error.message, code: error.code })
+        }
+        res.status(500).json({ error: error.message })
+    }
+}
+
 const getUserWithCards = async (req, res) => {
     try {
         const user = await userService.getUser(req.params.id)
@@ -275,6 +309,8 @@ export {
     addBalance,
     removeBalance,
     dailyBalance,
+    getStreakRestore,
+    restoreStreak,
     getUserWithCards,
     getUserWithNumberOfCards,
     rollRandomCard,

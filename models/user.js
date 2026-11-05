@@ -10,6 +10,20 @@ const DAILY_COOLDOWN_HOURS = 23
 const STREAK_WINDOW_HOURS = 48
 const HOUR_MS = 1000 * 60 * 60
 
+// --- REGLAS DE RECUPERACIÓN DE RACHA ---
+// Horas desde que se rompe la racha (lastDaily + STREAK_WINDOW_HOURS) durante las que se puede recuperar
+const STREAK_RESTORE_WINDOW_HOURS = 72
+// Racha mínima perdida para poder recuperarla
+const STREAK_RESTORE_MIN_STREAK = 2
+// Coste: base + porTramo * tramos completos de rachaPerdida, con tope.
+// Siempre múltiplo de 100 (lo mismo que el daily y un sobre), para no dejar monedas sueltas
+const STREAK_RESTORE_BASE_COST = 100
+const STREAK_RESTORE_COST_PER_STEP = 100
+const STREAK_RESTORE_COST_STEP_DAYS = 5
+const STREAK_RESTORE_MAX_COST = 1500
+// Días mínimos entre dos recuperaciones
+const STREAK_RESTORE_COOLDOWN_DAYS = 7
+
 const userCardSchema = new Schema(
     {
         _id: false,
@@ -34,6 +48,11 @@ const userSchema = new Schema(
         dailyStreak: {type:Number, default:0},
         maxDailyStreak: {type:Number, default:0},
         previousMaxStreak: {type:Number, default:0},
+        // Racha rota pendiente de recuperar (se guarda al reclamar el daily que la rompe)
+        lostStreak: {type:Number, default:0},
+        // Momento en que se rompió (lastDaily anterior + STREAK_WINDOW_HOURS)
+        streakLostAt: {type:Date, default:null},
+        lastStreakRestoreAt: {type:Date, default:null},
         totalDailiesClaimed: {type:Number, default:0},
         totalCoinsEarned: {type:Number, default:0},
         totalCoinsSpent: {type:Number, default:0},
@@ -114,4 +133,20 @@ userSchema.methods.updateLastTimeCommand = function updateLastTimeCommand(){
 
 const User = model('User', userSchema)
 
-export { User, DAILY_COOLDOWN_HOURS, STREAK_WINDOW_HOURS }
+// Coste de recuperar una racha perdida de lostStreak días
+const getStreakRestoreCost = (lostStreak) =>
+    Math.min(
+        STREAK_RESTORE_MAX_COST,
+        STREAK_RESTORE_BASE_COST + STREAK_RESTORE_COST_PER_STEP * Math.floor(lostStreak / STREAK_RESTORE_COST_STEP_DAYS)
+    )
+
+export {
+    User,
+    DAILY_COOLDOWN_HOURS,
+    STREAK_WINDOW_HOURS,
+    STREAK_RESTORE_WINDOW_HOURS,
+    STREAK_RESTORE_MIN_STREAK,
+    STREAK_RESTORE_COOLDOWN_DAYS,
+    HOUR_MS,
+    getStreakRestoreCost
+}
