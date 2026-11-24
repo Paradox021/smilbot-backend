@@ -9,6 +9,8 @@ import userRouter from './routers/userRouter.js'
 import marketRouter from './routers/marketRouter.js'
 import leaderboardRouter from './routers/leaderboardRouter.js'
 import authRouter from './routers/authRouter.js'
+import guildRouter from './routers/guildRouter.js'
+import musicRouter from './routers/musicRouter.js'
 import { authenticate } from './middleware/auth.js'
 import { getFrontendOrigin } from './libs/authCookies.js'
 import path from 'path'
@@ -44,6 +46,8 @@ app.use('/card', cardRouter)
 app.use('/user', userRouter)
 app.use('/market', marketRouter)
 app.use('/leaderboard', leaderboardRouter)
+app.use('/guild', guildRouter)
+app.use('/music', musicRouter)
 
 
 async function main(){
